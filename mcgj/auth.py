@@ -120,9 +120,9 @@ def auth_recurse_callback():
     id = db.query(
         "SELECT id FROM oauth WHERE external_id = ? and provider = ? LIMIT 1",
         [rc_id, RC_OAUTH_PROVIDER],
-        one=True,
-    )
-    id = int(id) if id is not None else None
+        one=True)
+
+    id = int(id['id']) if id is not None else None
     user = User(with_id=id)
     user.name = rc_user.get("name", "")
 
