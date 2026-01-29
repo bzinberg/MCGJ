@@ -64,6 +64,15 @@ def reset_db():
         # ok up migrations
         _up_db(connection)
         connection.commit()
+    return
+
+
+def migrate_user_data():
+    with current_app.app_context():
+        connection = connect()
+
+        connection.commit()
+    return
 
 
 @bp.cli.command("init")
@@ -81,6 +90,7 @@ def reset_db_command():
     click.echo(f"Clearing the database in {db}.")
     reset_db()
     click.echo(f"Reset the database in {db}.")
+    return
 
 
 def init_db_test():
