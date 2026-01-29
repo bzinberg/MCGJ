@@ -73,7 +73,7 @@ def auth_password():
             user.update()
             login_user(user)
             return redirect(url_for("mcgj.profile"))
-    return redirect(url_for("login_password.html"))
+    return redirect(url_for("mcgj.login_password"))
 
 
 @bp.route("/auth/recurse")
@@ -120,9 +120,10 @@ def auth_recurse_callback():
     id = db.query(
         "SELECT id FROM oauth WHERE external_id = ? and provider = ? LIMIT 1",
         [rc_id, RC_OAUTH_PROVIDER],
-        one=True)
+        one=True,
+    )
 
-    id = int(id['id']) if id is not None else None
+    id = int(id["id"]) if id is not None else None
     user = User(with_id=id)
     user.name = rc_user.get("name", "")
 
