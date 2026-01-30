@@ -1,8 +1,10 @@
 import os
+
 from flask import Flask
 from flask_login import LoginManager
-from . import db, mcgj, auth
 from werkzeug.middleware.proxy_fix import ProxyFix
+
+from . import auth, db, mcgj
 
 
 def create_app(test_config=None):
@@ -28,6 +30,9 @@ def create_app(test_config=None):
 
     # register the database commands
     db.init_app(app)
+    app.cli.add_command(auth.add_username_password)
+    app.cli.add_command(auth.add_user_command)
+    app.cli.add_command(auth.update_password)
 
     app.register_blueprint(mcgj.bp)
     app.register_blueprint(auth.bp)

@@ -1,10 +1,11 @@
-import spotipy
-import spotipy.util as util
-from spotipy.oauth2 import SpotifyClientCredentials
-import requests
-from bs4 import BeautifulSoup
-from urllib.parse import urlparse
+import logging
 import re
+from urllib.parse import urlparse
+
+import requests
+import spotipy
+from bs4 import BeautifulSoup
+from spotipy.oauth2 import SpotifyClientCredentials
 
 
 class SpotifyClient:
@@ -58,9 +59,8 @@ class BandcampClient:
             # title = name_section.find(attrs={"itemprop": "name"}).text.strip()
             # artist = name_section.find(attrs={"itemprop": "byArtist"}).text.strip()
             # art_url = soup.find("img", {"itemprop": "image"})["src"]
-        except:
-            print("Could not extract info from Bandcamp.")
-            print(url)
+        except Exception as e:
+            logging.error(f"could not get trackinfo from bandcamp, got: {e}", url=url)
             return None, None, None
 
         return title, artist, art_url

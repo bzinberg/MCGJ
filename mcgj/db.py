@@ -1,12 +1,13 @@
-import sqlite3
-import json
-import click
-from flask import Flask, g, Blueprint
-from flask.cli import with_appcontext
-from flask import current_app
-from .models import Track, Session
 import datetime
+import json
+import logging
+import pathlib
+import sqlite3
 
+import click
+from flask import Blueprint, current_app, g
+
+from .models import Session, Track
 
 bp = Blueprint("db", __name__)
 
@@ -34,21 +35,101 @@ def close_connection(exception):
         connection.close()
 
 
+def _up_db(connection):
+    updir = pathlib.Path("mcgj/migrations/up")
+    for up in updir.glob("*.sql"):
+        up = "/".join(up.parts[1:])
+        with current_app.open_resource(up) as f:
+            connection.cursor().executescript(f.read().decode("utf8"))
+        print(f"ran up migration {up}")
+    return
+
+
 def init_db():
     with current_app.app_context():
         connection = connect()
-        with current_app.open_resource("init-db.sql") as f:
-            connection.cursor().executescript(f.read().decode("utf8"))
+        _up_db(connection)
         connection.commit()
 
 
+def reset_db():
+    with current_app.app_context():
+        connection = connect()
+        downdir = pathlib.Path("mcgj/migrations/down")
+        for down in downdir.glob("*.sql"):
+            down = "/".join(down.parts[1:])
+            with current_app.open_resource(down) as f:
+                connection.cursor().executescript(f.read().decode("utf8"))
+            print(f"ran down migration: {down}")
+        # ok up migrations
+        _up_db(connection)
+        connection.commit()
+    return
+
+
+def migrate_user_data():
+    """REMOVE THIS ONCE THE MIGRATION IS DONE"""
+    with current_app.app_context():
+        connection = connect()
+        tmp = sqlite3.connect(":memory:")
+        connection.backup(tmp)
+        connection.close()
+        users = query("SELECT * FROM users")
+        sessions = query("SELECT * FROM sessions")
+        tracks = query("SELECT * FROM tracks")
+        reset_db()
+        for user in users:
+            id = user["id"]
+            created = user["create_date"]
+            try:
+                updated = user["update_date"]
+            except:
+                updated = None
+            try:
+                name = user["name"]
+            except:
+                name = ""
+            try:
+                nickname = user["nickname"]
+            except:
+                nickname = ""
+            # insert old row into new DB
+            execute(
+                "INSERT INTO users (id, create_date, update_date, name, nickname) VALUES (?, ?, ?, ?, ?)",
+                [id, created, updated, name, nickname],
+            )
+        for session in sessions:
+            id = session["id"]
+            created = session["create_date"]
+            try:
+                updated = session["update_date"]
+            except:
+                updated = None
+            name = session["name"]  # what is this?
+            execute(
+                "INSERT INTO sessions (id, create_date, update_date, name) VALUES (?, ?, ?, ?)",
+                [id, created, updated, name],
+            )
+
+    return
+
+
 @bp.cli.command("init")
-# @with_appcontext
 def init_db_command():
-    """DESTROY existing data and create a new table."""
+    """Non-destructively run the up migrations."""
+    db = current_app.config["DATABASE"]
     init_db()
-    click.echo(current_app.config["DATABASE"])
-    click.echo("Initialized the database.")
+    click.echo(f"Initialized the database in {db}.")
+
+
+@bp.cli.command("reset")
+def reset_db_command():
+    """Destroy existing data and re-run the up migrations."""
+    db = current_app.config["DATABASE"]
+    click.echo(f"Clearing the database in {db}.")
+    reset_db()
+    click.echo(f"Reset the database in {db}.")
+    return
 
 
 def init_db_test():
@@ -90,9 +171,6 @@ def init_db_test_command():
 
 
 def query(sql, args=(), one=False):
-    print(sql)
-    print(args)
-    print(one)
     cursor = connect().execute(sql, args)
     results = cursor.fetchall()
     # I think I don't have to close the connection because it
@@ -130,10 +208,10 @@ def init_app(app):
     """This is called in create_app() to register our functions with the application, because in this pattern, the decorators like @current_app.teardown_appcontext don't work."""
     app.teardown_appcontext(close_connection)
     app.cli.add_command(init_db_command)
+    app.cli.add_command(reset_db_command)
     app.cli.add_command(init_db_test_command)
 
 
 if __name__ == "__main__":
     with current_app.app_context():
         result = query("SELECT name FROM sqlite_master WHERE type='table';")
-    print(tracks)

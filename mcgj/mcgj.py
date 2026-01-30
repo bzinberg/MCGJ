@@ -1,16 +1,17 @@
-from flask import Blueprint, render_template, request, redirect, send_file, url_for
+import datetime
+import sqlite3
+import tempfile
+from itertools import chain, zip_longest
+
+from flask import Blueprint, redirect, render_template, request, send_file, url_for
 from flask import session as client_session
 from flask_login import current_user, login_required
-import datetime
-from itertools import chain, zip_longest
-from . import db
-from .models import Session, Track, User
-from . import services
+from werkzeug.security import check_password_hash, generate_password_hash
 
-import sqlite3, tempfile
+from . import db, services
+from .models import Session, Track, User
 
 # Given a session number, fetch all tracks, and pass an array to the template.
-
 
 bp = Blueprint("mcgj", __name__, template_folder="templates")
 
@@ -83,18 +84,28 @@ def search():
     return render_template("search.html", results=search_results)
 
 
+@bp.route("/login_password", methods=["GET"])
+def login_password():
+    return render_template("login_password.html")
+
+
 @bp.route("/profile")
 @login_required
 def profile():
     user_tracks_query = "SELECT * FROM tracks WHERE user_id = ? AND cue_date IS NOT NULL ORDER BY cue_date DESC LIMIT 50"
     user_tracks = db.query(sql=user_tracks_query, args=[current_user.id])
     user_tracks = [Track(row) for row in user_tracks] if user_tracks is not None else []
+    password = db.query(
+        "SELECT password_hash FROM passwords WHERE id = ?", [current_user.id], one=True
+    )
 
     for track in user_tracks:
         d = track.cue_date.date()
         track.cue_date = d
 
-    return render_template("edit_profile.html", user=current_user, tracks=user_tracks)
+    return render_template(
+        "edit_profile.html", user=current_user, tracks=user_tracks, password=password
+    )
 
 
 @bp.route("/latest_db", methods=["GET"])
@@ -114,6 +125,25 @@ def latest_db():
 def update_profile():
     user = current_user
     user.nickname = request.form["nickname"] if request.form["nickname"] != "" else None
+    old_pw = request.form["old_password"]
+    old_pw = old_pw if old_pw != "" else None
+    new_pw = request.form["new_password"]
+    new_pw = new_pw if new_pw != "" else None
+    confirm_pw = request.form["confirm_password"]
+    confirm_pw = confirm_pw if confirm_pw != "" else None
+    if old_pw is not None and new_pw is not None and confirm_pw is not None:
+        old_hash = db.query(
+            "SELECT password_hash FROM passwords WHERE id = ?", [user.id], one=True
+        )
+        if old_hash is not None:
+            old_hash = old_hash["password_hash"]
+            if check_password_hash(old_hash, old_pw):
+                if new_pw == confirm_pw:
+                    new_hash = generate_password_hash(new_pw)
+                    db.execute(
+                        "UPDATE passwords SET password_hash = ?, update_date = CURRENT_TIMESTAMP WHERE id = ?",
+                        [new_hash, user.id],
+                    )
     user.update()
     return redirect(url_for("mcgj.profile"))
 
@@ -275,7 +305,6 @@ def edit_session(session_id):
     - unplayed: A list of all unplayed tracks for this session.
     - played: A dictionary with a key-value pair for each round. The keys are the round numbers, and the values are lists of the tracks, ordered by their cue dates.
     """
-    print("edit {}".format(session_id))
     session = Session(with_id=session_id)
     return render_template("edit_session.html", session=session)
 
@@ -334,7 +363,6 @@ def update_track(track_id):
     sc = services.SpotifyClient()
     bc = services.BandcampClient()
     if sc.isSpotifyTrack(track.url):
-        print("Spotify track detected!")
         spotify_title, spotify_artist, spotify_art_url = sc.getTrackInfo(track.url)
         if not track.title:
             track.title = spotify_title
@@ -342,7 +370,6 @@ def update_track(track_id):
             track.artist = spotify_artist
         track.art_url = spotify_art_url
     elif bc.isBandcampTrack(track.url):
-        print("Bandcamp track detected!")
         bandcamp_title, bandcamp_artist, bandcamp_art_url = bc.getTrackInfo(track.url)
         if not track.title:
             track.title = bandcamp_title
@@ -358,7 +385,7 @@ def update_track(track_id):
         and str(track.session_id) in client_session["driving"]
     ):
         is_driving = client_session["driving"][str(track.session_id)]
-    if track.user_id == current_user.id or is_driving == True:
+    if track.user_id == current_user.id or is_driving:
         track.update()
     return redirect(url_for("mcgj.render_session", session_id=track.session_id))
 
@@ -402,7 +429,7 @@ def delete_track(track_id):
         and str(track.session_id) in client_session["driving"]
     ):
         is_driving = client_session["driving"][str(track.session_id)]
-    if track.user_id == current_user.id or is_driving == True:
+    if track.user_id == current_user.id or is_driving:
         track.delete()
     return redirect(url_for("mcgj.render_session", session_id=track.session_id))
 
@@ -426,7 +453,6 @@ def render_new_track():
 @login_required
 def insert_track():
     """Insert a new track row"""
-    print(request.form)
     track = Track(request.form)
     track.user_id = current_user.id
     # track.session_id = request.form["session_id"]
@@ -436,7 +462,6 @@ def insert_track():
     sc = services.SpotifyClient()
     bc = services.BandcampClient()
     if sc.isSpotifyTrack(track.url):
-        print("Spotify track detected!")
         spotify_title, spotify_artist, spotify_art_url = sc.getTrackInfo(track.url)
         if not track.title:
             track.title = spotify_title
@@ -444,7 +469,6 @@ def insert_track():
             track.artist = spotify_artist
         track.art_url = spotify_art_url
     elif bc.isBandcampTrack(track.url):
-        print("Bandcamp track detected!")
         bandcamp_title, bandcamp_artist, bandcamp_art_url = bc.getTrackInfo(track.url)
         if not track.title:
             track.title = bandcamp_title
@@ -455,8 +479,6 @@ def insert_track():
         track.art_url = sc.getNonSpotifyArtwork(track)
 
     track.insert()
-    print("ID of new track: {}".format(track.id))
-    print(track.__dict__)
     return redirect(url_for("mcgj.render_session", session_id=track.session_id))
 
 
@@ -466,7 +488,6 @@ def insert_session():
     """Create a new session"""
     sess = Session()
     sess.name = "Recurse MCG {}".format(datetime.date.today().isoformat())
-    sess.date = datetime.date.today()
     sess.current_round = 1
     sess.insert()
     return redirect(url_for("mcgj.render_session", session_id=sess.id))
