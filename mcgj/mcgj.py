@@ -488,7 +488,6 @@ def insert_session():
     """Create a new session"""
     sess = Session()
     sess.name = "Recurse MCG {}".format(datetime.date.today().isoformat())
-    sess.date = datetime.date.today()
     sess.current_round = 1
     sess.insert()
     return redirect(url_for("mcgj.render_session", session_id=sess.id))

@@ -11,8 +11,6 @@ CREATE TABLE IF NOT EXISTS sessions (
     create_date TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     update_date TIMESTAMP,
     name TEXT NOT NULL,
-    date DATE,
-    spotify_url TEXT, -- doesn't have to be spotify
     current_round INTEGER
 );
 

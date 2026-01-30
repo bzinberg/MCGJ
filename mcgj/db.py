@@ -68,10 +68,49 @@ def reset_db():
 
 
 def migrate_user_data():
+    """REMOVE THIS ONCE THE MIGRATION IS DONE"""
     with current_app.app_context():
         connection = connect()
+        tmp = sqlite3.connect(":memory:")
+        connection.backup(tmp)
+        connection.close()
+        users = query("SELECT * FROM users")
+        sessions = query("SELECT * FROM sessions")
+        tracks = query("SELECT * FROM tracks")
+        reset_db()
+        for user in users:
+            id = user["id"]
+            created = user["create_date"]
+            try:
+                updated = user["update_date"]
+            except:
+                updated = None
+            try:
+                name = user["name"]
+            except:
+                name = ""
+            try:
+                nickname = user["nickname"]
+            except:
+                nickname = ""
+            # insert old row into new DB
+            execute(
+                "INSERT INTO users (id, create_date, update_date, name, nickname) VALUES (?, ?, ?, ?, ?)",
+                [id, created, updated, name, nickname],
+            )
+        for session in sessions:
+            id = session["id"]
+            created = session["create_date"]
+            try:
+                updated = session["update_date"]
+            except:
+                updated = None
+            name = session["name"]  # what is this?
+            execute(
+                "INSERT INTO sessions (id, create_date, update_date, name) VALUES (?, ?, ?, ?)",
+                [id, created, updated, name],
+            )
 
-        connection.commit()
     return
 
 
