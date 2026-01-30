@@ -14,7 +14,9 @@ from flask_login import UserMixin
 
 
 def scrub(table_name):
-    return ''.join( chr for chr in table_name if chr.isalnum() )
+    return "".join(chr for chr in table_name if chr.isalnum())
+
+
 # scrub('); drop tables --')  # returns 'droptables'
 
 
@@ -24,9 +26,7 @@ class SQLite3BackedObject:
         self._table = scrub(table)
         if with_id is not None:
             row = db.query(
-                f"SELECT * FROM {self._table} WHERE id = ?",
-                [with_id],
-                one=True
+                f"SELECT * FROM {self._table} WHERE id = ?", [with_id], one=True
             )
             # If the row hasn't been created yet, set the id manually
             if not row:
@@ -34,7 +34,7 @@ class SQLite3BackedObject:
             else:
                 # Add the query row to the *args,
                 # which we treat as dictionaries next.
-                args += (row, )
+                args += (row,)
         for row in args:
             for key in row:
                 setattr(self, key, row[key])
@@ -68,7 +68,9 @@ class SQLite3BackedObject:
 
     def delete(self):
         if not hasattr(self, "id"):
-            raise AttributeError("This object does not have an id, so we can't delete it from the database.")
+            raise AttributeError(
+                "This object does not have an id, so we can't delete it from the database."
+            )
         sql = "DELETE FROM {} WHERE id = ?".format(self._table)
         print(sql)
         db.execute(sql, [str(self.id)])
@@ -89,7 +91,7 @@ class Track(SQLite3BackedObject):
 
     def absolute_url(self):
         url = self.url
-        if match(r'^[a-zA-Z]+://', url):
+        if match(r"^[a-zA-Z]+://", url):
             return url
         else:
             return "http://" + url
@@ -102,6 +104,7 @@ class Track(SQLite3BackedObject):
 class Session(SQLite3BackedObject):
     def __init__(self, *args, with_id=None, **kwargs):
         super().__init__(*args, with_id=with_id, table="sessions", **kwargs)
+
 
 class User(SQLite3BackedObject, UserMixin):
     def __init__(self, *args, with_id=None, **kwargs):
